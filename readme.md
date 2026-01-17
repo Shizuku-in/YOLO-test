@@ -24,7 +24,7 @@ python -m http.server 8000
 
 ### Change detect-class
 
-`detector.py`: `TARGET_CLASSES` and `NAME_MAPPING`
+- `detector.py`: `TARGET_CLASSES` and `NAME_MAPPING`
 
 ### Change alarm-style
 
