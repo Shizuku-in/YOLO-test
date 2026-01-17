@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>监控系统 DEMO</title>
+    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css" />
+    <script src="https://unpkg.com/vue@3"></script>
+    <script src="https://unpkg.com/element-plus"></script>
+    <link rel="stylesheet" href="style.css"> 
+</head>
+<body>
+    <div id="app">
+        <div class="header">
+            <div class="header-title">
+                <span class="header-icon">⚠</span> 
+                监控系统 DEMO <span style="font-size: 12px; opacity: 0.5; font-weight: normal; margin-top: 4px;">V0.1</span>
+            </div>
+            
+            <div class="status-badge" :class="isCloudConnected ? 'online' : 'offline'">
+                <div class="status-dot"></div> 
+                {{ isCloudConnected ? '后端连接正常' : '后端连接失败' }}
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="video-section">
+                <div class="video-hud"></div>
+                <div class="camera-info">CAM_01 | 边缘计算节点 A</div>
+                
+                <div class="live-indicator" :class="isCameraConnected ? 'online' : 'offline'">
+                    <div class="indicator-dot"></div> 
+                    {{ isCameraConnected ? 'LIVE' : 'DISCONNECTED' }}
+                </div>
+
+                <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;">
+                    <img :src="videoSrc" 
+                        class="video-stream"
+                        @load="handleVideoLoad"
+                        @error="handleVideoError"
+                        alt="无信号接入" />
+                </div>
+            </div>
+
+            <div class="alarm-section">
+                <div class="alarm-header">
+                    <h3>风险预警</h3>
+                    <span style="font-size: 12px; color: var(--text-secondary);">累计: {{ alarms.length }}</span>
+                </div>
+                
+                <div class="alarm-list">
+                    <el-empty v-if="alarms.length === 0" :image-size="80" description="暂无异常"></el-empty>
+                    
+                    <div v-for="(alarm, index) in alarms" 
+                         :key="index" 
+                         class="alarm-item"
+                         :class="getAlarmConfig(alarm.type).className">
+                        
+                        <div class="alarm-top">
+                            <span class="alarm-time">{{ alarm.time }}</span>
+                            <span class="tag" :class="getAlarmConfig(alarm.type).tagClass">
+                                {{ alarm.type }}
+                            </span>
+                        </div>
+                        
+                        <div class="alarm-content">
+                            <div class="info-row">
+                                <span class="label">位置:</span>
+                                <span>{{ alarm.location }}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">置信度:</span>
+                                <span>{{ alarm.desc }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted } = Vue;
+        const { ElNotification } = ElementPlus;
+
+        // Mapping Table
+        const ALARM_CONFIG_MAP = {
+            'Person detected!': { 
+                className: 'type-a', 
+                tagClass: 'a' 
+            },
+            'Bicycle detected!': { 
+                className: 'type-b', 
+                tagClass: 'b' 
+            },
+            '?': {
+                className: 'type-default',
+                tagClass: 'default'
+            }
+        };
+
+        const App = {
+            setup() {
+                const alarms = ref([]);
+                const isCloudConnected = ref(false); // 云端 WebSocket 状态
+                const isCameraConnected = ref(false); // 摄像头流状态
+                const videoSrc = ref("http://localhost:5000/stream");
+
+                // 获取报警配置的辅助函数
+                const getAlarmConfig = (type) => {
+                    return ALARM_CONFIG_MAP[type] || { className: 'type-default', tagClass: 'default' };
+                };
+
+                // 视频流事件处理
+                const handleVideoLoad = () => {
+                    // 图片(流)有数据返回
+                    isCameraConnected.value = true;
+                };
+                const handleVideoError = () => {
+                    // 图片加载失败（后端没开或断网）
+                    isCameraConnected.value = false;
+                    // 可选：断线后尝试重连图片的逻辑
+                    // setTimeout(() => { videoSrc.value = ... }, 5000)
+                };
+
+                const connectWebSocket = () => {
+                    // 模拟 WS 地址，实际使用请改为真实地址
+                    const ws = new WebSocket("ws://localhost:8000/ws");
+                    
+                    ws.onopen = () => { 
+                        console.log("WebSocket Connected");
+                        isCloudConnected.value = true; // 需求2：变绿
+                    };
+                    
+                    ws.onmessage = (event) => {
+                        try {
+                            const data = JSON.parse(event.data);
+                            alarms.value.unshift(data);
+                            
+                            // 简单的通知
+                            ElNotification({
+                                title: '安全警报',
+                                message: `${data.location} - ${data.type}`,
+                                type: 'error',
+                                position: 'bottom-right',
+                            });
+                        } catch (e) {
+                            console.error("数据解析错误", e);
+                        }
+                    };
+
+                    ws.onclose = () => { 
+                        console.log("WebSocket Disconnected");
+                        isCloudConnected.value = false; // 需求2：变灰
+                        
+                        // 断线重连机制
+                        setTimeout(connectWebSocket, 3000); 
+                    };
+
+                    ws.onerror = () => {
+                        isCloudConnected.value = false;
+                    };
+                };
+
+                onMounted(() => {
+                    connectWebSocket();
+                });
+
+                return { 
+                    alarms, 
+                    isCloudConnected, 
+                    isCameraConnected,
+                    videoSrc,
+                    handleVideoLoad,
+                    handleVideoError,
+                    getAlarmConfig 
+                };
+            }
+        };
+
+        const app = createApp(App);
+        app.use(ElementPlus);
+        app.mount("#app");
+    </script>
+</body>
+</html>

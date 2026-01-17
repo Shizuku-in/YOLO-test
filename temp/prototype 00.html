@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>工厂智能安全监控系统 - MVP</title>
+    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css" />
+    <script src="https://unpkg.com/vue@3"></script>
+    <script src="https://unpkg.com/element-plus"></script>
+    <style>
+        body { margin: 0; background-color: #f0f2f5; font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', sans-serif; }
+        .header { background-color: #001529; color: white; padding: 20px; font-size: 24px; display: flex; align-items: center; }
+        .container { display: flex; padding: 20px; gap: 20px; height: calc(100vh - 80px); }
+        .video-section { flex: 2; background: black; color: white; display: flex; justify-content: center; align-items: center; border-radius: 8px; position: relative;}
+        .alarm-section { flex: 1; background: white; padding: 20px; border-radius: 8px; overflow-y: auto; box-shadow: 0 2px 12px 0 rgba(0,0,0,0.1); }
+        .alarm-item { border-left: 5px solid #ff4d4f; background: #fff1f0; padding: 10px; margin-bottom: 10px; border-radius: 4px; }
+        .tag-0 { color: red; font-weight: bold; }
+        .tag-1 { color: orange; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="header">
+            <span>🛡️ 工厂智能安全监控系统 (MVP Demo)</span>
+        </div>
+        <div class="container">
+            <div class="video-section">
+                <div style="text-align: center; width: 100%; height: 100%;">
+                    <h2 style="position: absolute; top: 10px; left: 20px; z-index: 10; color: #00ff00; text-shadow: 1px 1px 2px black;">
+                        🔴 LIVE | 边缘计算节点 A
+                    </h2>
+                    
+                    <img src="http://localhost:5000/stream" 
+                        style="width: 100%; height: 100%; object-fit: contain; background-color: #000;" 
+                        alt="等待摄像头连接..." />
+                </div>
+            </div>
+            </div>
+
+            <div class="alarm-section">
+                <h3>🔔 实时风险预警</h3>
+                <el-empty v-if="alarms.length === 0" description="暂无异常"></el-empty>
+                
+                <div v-for="(alarm, index) in alarms" :key="index" class="alarm-item">
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="font-weight: bold;">{{ alarm.time }}</span>
+                        <span :class="{'tag-0': alarm.type==='Person detected!', 'tag-1': alarm.type==='Bicycle detected!'}">{{ alarm.type }}</span>
+                    </div>
+                    <div style="margin-top: 5px; color: #666;">
+                        位置: {{ alarm.location }} <br>
+                        详情: {{ alarm.desc }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted } = Vue;
+        const { ElNotification } = ElementPlus;
+
+        const App = {
+            setup() {
+                const alarms = ref([]);
+
+                // 连接 WebSocket
+                const connectWebSocket = () => {
+                    const ws = new WebSocket("ws://localhost:8000/ws");
+                    
+                    ws.onopen = () => { console.log("云端连接成功"); };
+                    
+                    ws.onmessage = (event) => {
+                        const data = JSON.parse(event.data);
+                        // 1. 添加到列表
+                        alarms.value.unshift(data);
+                        
+                        // 2. 弹出警告框
+                        ElNotification({
+                            title: '发现安全隐患!',
+                            message: `${data.location} 检测到 ${data.type}`,
+                            type: 'error',
+                            duration: 4000
+                        });
+                    };
+
+                    ws.onclose = () => { 
+                        console.log("连接断开，尝试重连...");
+                        setTimeout(connectWebSocket, 3000); 
+                    };
+                };
+
+                onMounted(() => {
+                    connectWebSocket();
+                });
+
+                return { alarms };
+            }
+        };
+
+        const app = createApp(App);
+        app.use(ElementPlus);
+        app.mount("#app");
+    </script>
+</body>
+</html>
