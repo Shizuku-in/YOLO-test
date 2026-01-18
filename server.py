@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime
 import json
+from config import SERVER_HOST, SERVER_PORT, ALLOWED_ORIGINS
 
 C_GREEN = "\033[92m"
 C_RED   = "\033[91m"
@@ -13,7 +14,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -66,4 +67,5 @@ async def report_alarm(data: AlarmData):
     return {"status": "received"}
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=1145)
+    print(f"{C_GREEN}[Server started]{C_RESET} http://{SERVER_HOST}:{SERVER_PORT}")
+    uvicorn.run(app, host=SERVER_HOST, port=SERVER_PORT)

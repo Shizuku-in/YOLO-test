@@ -2,9 +2,17 @@ import cv2
 import time
 import requests
 import threading
+import signal
+import sys
 from flask import Flask, Response
 from ultralytics import YOLO
 from datetime import datetime
+from config import (
+    DETECTOR_HOST, DETECTOR_PORT, CAMERA_INDEX, 
+    CAMERA_WIDTH, CAMERA_HEIGHT, MODEL_PATH,
+    CONFIDENCE_THRESHOLD, TARGET_CLASSES, 
+    ALARM_COOLDOWN, SERVER_URL
+)
 
 C_GREEN = "\033[92m"
 C_RED   = "\033[91m"
@@ -13,24 +21,18 @@ C_RESET = "\033[0m"
 app = Flask(__name__)
 
 # 模型
-model = YOLO("yolo11n.pt") 
-
-# 接口
-SERVER_URL = "http://localhost:1145/api/report_alarm"
+model = YOLO(MODEL_PATH)
 
 # 摄像头
-camera = cv2.VideoCapture(0)
-camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+camera = cv2.VideoCapture(CAMERA_INDEX)
+camera.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
+camera.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
 camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
 
 # 冷却
 last_time = 0
-ALARM_COOLDOWN = 10 # 秒
 
 # 类别映射
-# 例 0: person; 1: bicycle
-TARGET_CLASSES = [0, 1] 
 NAME_MAPPING = {
     "person": "Person detected!",
     "bicycle": "Bicycle detected!"
@@ -61,7 +63,7 @@ def generate_frames():
             break
 
         # 推理
-        results = model(frame, stream=True, classes=TARGET_CLASSES, conf=0.5, verbose=False)
+        results = model(frame, stream=True, classes=TARGET_CLASSES, conf=CONFIDENCE_THRESHOLD, verbose=False)
 
         detected_risk = False
         max_conf = 0.0
@@ -103,6 +105,24 @@ def generate_frames():
 def stream():
     return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame') # 前端通过这个路由获取视频流
 
+def cleanup():
+    print(f"\n{C_RED}[Shutting down]{C_RESET} Releasing camera...")
+    camera.release()
+    cv2.destroyAllWindows()
+    print(f"{C_GREEN}[Cleanup complete]{C_RESET}")
+
+def signal_handler(sig, frame):
+    cleanup()
+    sys.exit(0)
+
 if __name__ == '__main__':
-    print(f"{C_GREEN}[Streaming started]{C_RESET} http://localhost:1919/stream")
-    app.run(host='0.0.0.0', port=1919, debug=False)
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    print(f"{C_GREEN}[Streaming started]{C_RESET} http://{DETECTOR_HOST}:{DETECTOR_PORT}/stream")
+    print(f"{C_GREEN}[Config]{C_RESET} Model: {MODEL_PATH}, Camera: {CAMERA_INDEX}, Classes: {TARGET_CLASSES}")
+    
+    try:
+        app.run(host=DETECTOR_HOST, port=DETECTOR_PORT, debug=False)
+    finally:
+        cleanup()

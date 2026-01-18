@@ -1,8 +1,9 @@
 import { ElNotification } from 'element-plus';
+import { CONFIG } from './env.config.js';
 
 export function useWebSocket(alarms, isCloudConnected) {
     const connectWebSocket = () => {
-        const ws = new WebSocket("ws://localhost:1145/ws"); // 模拟 WS 地址
+        const ws = new WebSocket(CONFIG.WEBSOCKET_URL);
         
         ws.onopen = () => { 
             console.log("WebSocket Connected");
@@ -28,7 +29,7 @@ export function useWebSocket(alarms, isCloudConnected) {
         ws.onclose = () => { 
             console.log("WebSocket Disconnected");
             isCloudConnected.value = false;
-            setTimeout(connectWebSocket, 3000); // 断线重连
+            setTimeout(connectWebSocket, CONFIG.WS_RECONNECT_DELAY);
         };
 
         ws.onerror = () => {
